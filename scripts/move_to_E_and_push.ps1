@@ -2,6 +2,23 @@ param(
     [string]$RepoUrl = ""
 )
 
+$ErrorActionPreference = "Stop"
+$Target = "E:\HydrogenHttpd"
+
+Write-Host "Preparing target folder: $Target"
+
+if (!(Test-Path "E:\")) {
+    throw "Drive E: does not exist or is not mounted."
+}
+
+if (Test-Path $Target) {
+    Write-Host "Existing E:\HydrogenHttpd found. Creating backup..."
+    $Backup = "E:\HydrogenHttpd_backup_" + (Get-Date -Format "yyyyMMdd_HHmmss")
+    Write-Host "Backup created: $Backup"
+}
+
+
+Set-Location $Target
 
 if (!(Test-Path ".git")) {
     git init
@@ -31,6 +48,9 @@ if ($RepoUrl -ne "") {
     Write-Host "Pushed to GitHub: $RepoUrl"
 } else {
     Write-Host ""
-    Write-Host "  git remote add origin git@github.com:flamfik/HydrogenHTTPD.git"
+    Write-Host "Project moved and committed locally at: $Target"
+    Write-Host "To push later:"
+    Write-Host "  cd E:\HydrogenHttpd"
+    Write-Host "  git remote add origin git@github.com:flamfik/hydrogenhttpd.git"
     Write-Host "  git push -u origin main"
 }
