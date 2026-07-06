@@ -30,8 +30,8 @@ if (!(Test-Path ".git")) {
     git init
 }
 
-git config user.name "Bartosz Suchy"
-git config user.email "post.apo@gmail.com"
+git config user.name "flamfik"
+git config user.email "arclite@o2.pl"
 
 Write-Host "Switching branch to $Branch..."
 git branch -M $Branch
@@ -75,7 +75,7 @@ if ([string]::IsNullOrWhiteSpace($changes)) {
 
 Write-Host ""
 Write-Host "Pushing to $RemoteName/$Branch..."
-git push -u $RemoteName $Branch
+git push -u $RemoteName $Branch --force
 
 Write-Host ""
 Write-Host "Done."
