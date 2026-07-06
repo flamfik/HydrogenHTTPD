@@ -56,3 +56,11 @@ Thumbs.db
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Uploaded runtime files
+uploads/*
+!uploads/.gitkeep
+
+# Upload spool runtime files
+tmp/uploads/*
+!tmp/uploads/.gitkeep

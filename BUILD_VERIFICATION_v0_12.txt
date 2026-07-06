@@ -1,0 +1,29 @@
+HydrogenHttpd v0.12 build verification
+
+Checked with GCC/CMake in this environment.
+
+Variant 1:
+cmake -S . -B build \
+  -DHYDROGENHTTPD_BUILD_TESTS=ON \
+  -DHYDROGENHTTPD_ENABLE_TLS=ON \
+  -DHYDROGENHTTPD_ENABLE_SQLITE=ON \
+  -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+
+Result:
+100% tests passed, 0 tests failed out of 11
+
+Variant 2:
+cmake -S . -B build_no \
+  -DHYDROGENHTTPD_BUILD_TESTS=ON \
+  -DHYDROGENHTTPD_ENABLE_TLS=OFF \
+  -DHYDROGENHTTPD_ENABLE_SQLITE=OFF \
+  -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+cmake --build build_no --parallel
+ctest --test-dir build_no --output-on-failure
+
+Result:
+100% tests passed, 0 tests failed out of 9

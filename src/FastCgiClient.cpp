@@ -125,8 +125,18 @@ std::vector<unsigned char> FastCgiClient::buildParams(const std::unordered_map<s
     return out;
 }
 
-std::vector<unsigned char> FastCgiClient::buildStdinEmpty() const {
+
+std::vector<unsigned char> FastCgiClient::buildStdin(const std::string& body) const {
     std::vector<unsigned char> out;
+    constexpr std::size_t chunkSize = 65535;
+
+    for (std::size_t offset = 0; offset < body.size(); offset += chunkSize) {
+        auto end = std::min(body.size(), offset + chunkSize);
+        std::vector<unsigned char> chunk(body.begin() + static_cast<std::ptrdiff_t>(offset),
+                                         body.begin() + static_cast<std::ptrdiff_t>(end));
+        appendRecord(out, FCGI_STDIN, REQUEST_ID, chunk);
+    }
+
     appendRecord(out, FCGI_STDIN, REQUEST_ID, {});
     return out;
 }
@@ -156,13 +166,18 @@ FastCgiResponse FastCgiClient::execute(const FastCgiRequest& request) {
         {"SERVER_PROTOCOL", request.serverProtocol},
         {"SERVER_NAME", request.serverName},
         {"REMOTE_ADDR", request.remoteAddr},
-        {"REDIRECT_STATUS", "200"}
+        {"REDIRECT_STATUS", "200"},
+        {"CONTENT_LENGTH", std::to_string(request.body.size())}
     };
+
+    if (!request.contentType.empty()) {
+        params["CONTENT_TYPE"] = request.contentType;
+    }
 
     std::vector<unsigned char> wire;
     auto begin = buildBeginRequest();
     auto par = buildParams(params);
-    auto in = buildStdinEmpty();
+    auto in = buildStdin(request.body);
     wire.insert(wire.end(), begin.begin(), begin.end());
     wire.insert(wire.end(), par.begin(), par.end());
     wire.insert(wire.end(), in.begin(), in.end());

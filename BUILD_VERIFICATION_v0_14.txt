@@ -1,0 +1,45 @@
+HydrogenHttpd v0.14 build verification
+
+Checked with GCC 14.2.0 and CMake in this environment.
+
+Variant 1:
+cmake -S . -B build \
+  -DHYDROGENHTTPD_BUILD_TESTS=ON \
+  -DHYDROGENHTTPD_ENABLE_TLS=ON \
+  -DHYDROGENHTTPD_ENABLE_SQLITE=ON \
+  -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+cmake --build build --parallel
+
+Test groups verified:
+- unit tests: 9/9 passed
+- integration_http_tests: passed
+- integration_https_tests: passed
+- exploit_regression_tests: passed
+- integration_post_body_tests: passed
+- integration_upload_tests: passed
+
+Total coverage in this variant:
+14 tests passed.
+
+Variant 2:
+cmake -S . -B build_no \
+  -DHYDROGENHTTPD_BUILD_TESTS=ON \
+  -DHYDROGENHTTPD_ENABLE_TLS=OFF \
+  -DHYDROGENHTTPD_ENABLE_SQLITE=OFF \
+  -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+cmake --build build_no --parallel
+
+Test groups verified:
+- unit tests: 8/8 passed
+- integration_http_tests: passed
+- exploit_regression_tests: passed
+- integration_post_body_tests: passed
+- integration_upload_tests: passed
+
+Total coverage in this variant:
+12 tests passed.
+
+Note:
+The integration tests were run in shorter groups in this notebook environment to avoid tool execution time limits.

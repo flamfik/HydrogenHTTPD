@@ -21,6 +21,8 @@ struct FastCgiRequest {
     std::string serverName = "localhost";
     std::string serverProtocol = "HTTP/1.1";
     std::string remoteAddr = "127.0.0.1";
+    std::string contentType;
+    std::string body;
 };
 
 class FastCgiClient {
@@ -42,7 +44,7 @@ public:
 private:
     std::vector<unsigned char> buildBeginRequest() const;
     std::vector<unsigned char> buildParams(const std::unordered_map<std::string, std::string>& params) const;
-    std::vector<unsigned char> buildStdinEmpty() const;
+    std::vector<unsigned char> buildStdin(const std::string& body) const;
     static void appendRecord(std::vector<unsigned char>& out, std::uint8_t type, std::uint16_t requestId, const std::vector<unsigned char>& content);
     static FastCgiResponse parseCgiResponse(const std::string& raw);
 

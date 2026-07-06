@@ -3,26 +3,48 @@
 #include <filesystem>
 #include <string>
 #include <unordered_map>
+#include <vector>
+
+struct AuthTokenRule {
+    std::string name;
+    std::string token;
+    std::vector<std::string> scopes;
+};
 
 struct ServerConfig {
     unsigned short port = 8080;
     bool enableTls = false;
     unsigned short tlsPort = 8443;
+    unsigned short publicHttpsPort = 443;
     std::filesystem::path tlsCertFile = "certs/server.crt";
     std::filesystem::path tlsKeyFile = "certs/server.key";
+
+    bool forceHttps = false;
+    int httpsRedirectStatus = 308;
+    bool exposeServerHeader = false;
 
     std::filesystem::path defaultRoot = "www";
     std::filesystem::path accessLog = "logs/access.log";
     std::filesystem::path errorLog = "logs/error.log";
+    std::filesystem::path auditLog = "logs/audit.log";
 
     std::size_t maxRequestBytes = 16 * 1024;
+    std::size_t maxBodyBytes = 1024 * 1024;
+    std::size_t maxHeaderLineBytes = 4096;
+    std::size_t maxHeaders = 100;
+    std::size_t maxUriBytes = 2048;
+    std::size_t maxMethodBytes = 16;
     std::size_t rateLimitPerMinute = 120;
     unsigned int readTimeoutSeconds = 5;
 
     std::size_t workerThreads = 4;
     std::size_t maxPendingConnections = 256;
 
-    bool enableHtaccess = true;
+    bool denyHiddenFiles = true;
+    bool allowDotWellKnown = true;
+    bool blockSensitiveFiles = true;
+
+    bool enableHtaccess = false;
     std::string htaccessFilename = ".htaccess";
     std::size_t maxHtaccessDepth = 8;
 
@@ -35,6 +57,18 @@ struct ServerConfig {
 
     bool enableSql = false;
     std::filesystem::path sqliteDatabase = "sql/hydrogen.db";
+
+    bool enableUploads = false;
+    std::string uploadEndpoint = "/__hydrogen/upload";
+    std::filesystem::path uploadDirectory = "uploads";
+    std::filesystem::path uploadSpoolDirectory = "tmp/uploads";
+    std::size_t maxMultipartParts = 16;
+    std::size_t maxUploadFileBytes = 1024 * 1024;
+    std::size_t maxUploadFieldBytes = 16 * 1024;
+
+    bool enableEndpointAuth = false;
+    std::string authBearerToken;
+    std::vector<AuthTokenRule> authTokens;
 
     std::unordered_map<std::string, std::filesystem::path> virtualHosts;
 };

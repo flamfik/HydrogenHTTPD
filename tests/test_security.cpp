@@ -13,7 +13,7 @@ int main() {
     std::ofstream(base / "secret" / "passwords.txt") << "secret";
     assert(security::isMethodAllowed("GET"));
     assert(security::isMethodAllowed("HEAD"));
-    assert(!security::isMethodAllowed("POST"));
+    assert(security::isMethodAllowed("POST"));
     assert(!security::isMethodAllowed("TRACE"));
     auto index = security::resolveSafePath(base / "www", "/");
     assert(index.has_value());

@@ -62,6 +62,7 @@ def main():
             "max_request_bytes = 2048",
             "rate_limit_per_minute = 100",
             "read_timeout_seconds = 2",
+            "expose_server_header = true",
             "worker_threads = 2",
             "max_pending_connections = 8",
             "enable_htaccess = true",

@@ -2,7 +2,7 @@
 
 ## Near term
 
-- POST body support with strict limits
+- Streaming uploads to disk without buffering full body
 - Better FastCGI response header mapping
 - HTTPS integration test improvements
 - Per-vhost PHP-FPM configuration
@@ -32,3 +32,18 @@
 - Dockerfile
 - devcontainer
 - packaged releases
+
+
+## After v0.13
+
+- Chunked transfer decoding with strict limits.
+- Multipart form parsing.
+- FastCGI integration test with PHP-FPM container.
+
+
+## After v0.14
+
+- Upload authentication and authorization.
+- Per-directory upload policy.
+- Quotas and cleanup jobs.
+- Optional content scanning hook.

@@ -1,0 +1,42 @@
+HydrogenHttpd v0.16 build verification
+
+Checked with GCC 14.2.0 and CMake.
+
+Variant 1: TLS + SQLite
+
+cmake -S . -B build \
+  -DHYDROGENHTTPD_BUILD_TESTS=ON \
+  -DHYDROGENHTTPD_ENABLE_TLS=ON \
+  -DHYDROGENHTTPD_ENABLE_SQLITE=ON \
+  -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+Verified:
+- hydrogen_httpd target builds
+- all unit tests pass: 9/9
+- integration_http_tests: passed
+- integration_https_tests: passed
+- exploit_regression_tests: passed
+- integration_post_body_tests: passed
+- integration_upload_tests: passed
+- integration_upload_auth_tests: passed
+
+Total verified tests in this variant:
+15 passed.
+
+Variant 2: no TLS, no SQLite
+
+cmake -S . -B build_no \
+  -DHYDROGENHTTPD_BUILD_TESTS=ON \
+  -DHYDROGENHTTPD_ENABLE_TLS=OFF \
+  -DHYDROGENHTTPD_ENABLE_SQLITE=OFF \
+  -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+Verified:
+- hydrogen_httpd target builds
+- all available tests pass
+
+Total verified tests in this variant:
+13 passed.
+
+Note:
+In this notebook environment, long CTest runs were split into shorter groups to avoid tool execution limits.

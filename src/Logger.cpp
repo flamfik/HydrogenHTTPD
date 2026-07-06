@@ -4,19 +4,23 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-Logger::Logger(const std::filesystem::path& accessPath, const std::filesystem::path& errorPath) {
+Logger::Logger(const std::filesystem::path& accessPath, const std::filesystem::path& errorPath, const std::filesystem::path& auditPath) {
     std::filesystem::create_directories(accessPath.parent_path());
     std::filesystem::create_directories(errorPath.parent_path());
+    std::filesystem::create_directories(auditPath.parent_path());
     access_.open(accessPath, std::ios::app);
     error_.open(errorPath, std::ios::app);
+    audit_.open(auditPath, std::ios::app);
     if (!access_) std::cerr << "Warning: cannot open access log: " << accessPath << "\n";
     if (!error_) std::cerr << "Warning: cannot open error log: " << errorPath << "\n";
+    if (!audit_) std::cerr << "Warning: cannot open audit log: " << auditPath << "\n";
 }
 void Logger::access(const std::string& ip, const std::string& scheme, const std::string& method, const std::string& target, int status, std::size_t bytes) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (access_) access_ << now() << " ip=" << ip << " scheme=" << scheme << " method=" << method << " target=\"" << target << "\" status=" << status << " bytes=" << bytes << "\n";
 }
 void Logger::error(const std::string& message) { std::lock_guard<std::mutex> lock(mutex_); if (error_) error_ << now() << " " << message << "\n"; }
+void Logger::audit(const std::string& message) { std::lock_guard<std::mutex> lock(mutex_); if (audit_) { audit_ << now() << " " << message << "\n"; audit_.flush(); } }
 std::string Logger::now() const {
     auto current = std::chrono::system_clock::now();
     auto time = std::chrono::system_clock::to_time_t(current);

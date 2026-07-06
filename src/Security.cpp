@@ -7,6 +7,20 @@ namespace fs = std::filesystem;
 
 namespace security {
 
+
+static bool containsDangerousResidualEncoding(const std::string& value) {
+    std::string lowerValue = value;
+    std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    // After one URL decode pass, these remaining encodings indicate double-encoded
+    // traversal/separator attempts such as %252e%252e or %252f.
+    return lowerValue.find("%2e") != std::string::npos ||
+           lowerValue.find("%2f") != std::string::npos ||
+           lowerValue.find("%5c") != std::string::npos;
+}
+
 static bool startsWithPath(const fs::path& path, const fs::path& root) {
     auto p = fs::weakly_canonical(path);
     auto r = fs::weakly_canonical(root);
@@ -35,7 +49,7 @@ std::string urlDecode(const std::string& value) {
     return result;
 }
 
-bool isMethodAllowed(const std::string& method) { return method == "GET" || method == "HEAD"; }
+bool isMethodAllowed(const std::string& method) { return method == "GET" || method == "HEAD" || method == "POST"; }
 
 bool hasSuspiciousTarget(const std::string& target) {
     if (target.empty()) return true;
@@ -48,10 +62,12 @@ bool hasSuspiciousTarget(const std::string& target) {
 
 std::optional<fs::path> resolveSafePath(const fs::path& documentRoot, const std::string& rawTarget) {
     if (hasSuspiciousTarget(rawTarget)) return std::nullopt;
+    if (containsDangerousResidualEncoding(rawTarget)) return std::nullopt;
     std::string target = rawTarget;
     auto queryPos = target.find('?');
     if (queryPos != std::string::npos) target = target.substr(0, queryPos);
     target = urlDecode(target);
+    if (containsDangerousResidualEncoding(target)) return std::nullopt;
     if (target.find('\0') != std::string::npos) return std::nullopt;
     if (target.find('\\') != std::string::npos) return std::nullopt;
     while (!target.empty() && target.front() == '/') target.erase(target.begin());

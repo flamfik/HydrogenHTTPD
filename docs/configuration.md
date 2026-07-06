@@ -40,6 +40,7 @@ error_log = logs/error.log
 
 ```ini
 max_request_bytes = 16384
+max_body_bytes = 1048576
 rate_limit_per_minute = 120
 read_timeout_seconds = 5
 ```
@@ -91,4 +92,25 @@ sqlite_database = sql/hydrogen.db
 ```ini
 vhost.localhost = www
 vhost.127.0.0.1 = www
+```
+
+
+## Uploads
+
+```ini
+enable_uploads = false
+upload_endpoint = /__hydrogen/upload
+upload_directory = uploads
+upload_spool_directory = tmp/uploads
+max_multipart_parts = 16
+max_upload_file_bytes = 1048576
+max_upload_field_bytes = 16384
+```
+
+
+## Endpoint authorization
+
+```ini
+enable_endpoint_auth = false
+auth_bearer_token =
 ```
