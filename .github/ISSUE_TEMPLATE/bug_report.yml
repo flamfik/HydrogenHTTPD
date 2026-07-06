@@ -1,0 +1,53 @@
+name: Bug report
+description: Report a reproducible problem
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Provide exact steps to reproduce the issue.
+      placeholder: |
+        1. Build with...
+        2. Configure...
+        3. Run...
+        4. Request...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: Ubuntu 24.04, Windows 11, macOS...
+    validations:
+      required: true
+
+  - type: textarea
+    id: build
+    attributes:
+      label: Build options
+      placeholder: cmake -S . -B build ...

@@ -1,0 +1,2 @@
+Header set X-Example HydrogenHttpd
+Options -Indexes

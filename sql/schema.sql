@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS hydrogen_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    event_type TEXT NOT NULL,
+    message TEXT NOT NULL
+);
