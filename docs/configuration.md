@@ -114,3 +114,60 @@ max_upload_field_bytes = 16384
 enable_endpoint_auth = false
 auth_bearer_token =
 ```
+
+
+## Hashed token store
+
+```ini
+enable_endpoint_auth = true
+auth_secrets_file = secrets/auth.tokens
+```
+
+Token file entries:
+
+```ini
+token.upload = sha256:<hash> | upload | never
+token.admin = sha256:<hash> | upload,admin | 1893456000
+```
+
+## Admin status endpoint
+
+```ini
+enable_admin_status = false
+admin_status_endpoint = /__hydrogen/admin/status
+```
+
+`enable_admin_status = true` requires `enable_endpoint_auth = true`.
+
+
+## High-load runtime
+
+```ini
+enable_rate_limiter = true
+rate_limiter_shards = 64
+io_threads = 2
+worker_threads = 0
+worker_thread_multiplier = 4
+max_pending_connections = 4096
+listen_backlog = 4096
+tcp_no_delay = true
+tcp_keep_alive = true
+socket_receive_buffer_bytes = 0
+socket_send_buffer_bytes = 0
+
+async_access_log = true
+enable_access_log = true
+access_log_sample_rate = 1
+access_log_queue_capacity = 65536
+access_log_flush_interval_ms = 100
+
+enable_static_cache = true
+static_cache_shards = 32
+static_cache_max_entries = 4096
+static_cache_max_bytes = 268435456
+static_cache_max_file_bytes = 4194304
+static_cache_revalidate_ms = 1000
+static_cache_control = public, max-age=60
+```
+
+See `server.high-load.conf` and `docs/high-load-performance.md`.

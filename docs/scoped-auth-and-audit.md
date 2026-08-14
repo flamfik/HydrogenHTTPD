@@ -62,7 +62,7 @@ Events:
 
 ```txt
 auth_missing
-auth_denied
+auth_scope_denied
 auth_allowed
 ```
 
@@ -70,7 +70,7 @@ Example log lines:
 
 ```txt
 event=auth_missing ip=127.0.0.1 target="/__hydrogen/upload" required_scope=upload token="-" status=401
-event=auth_denied ip=127.0.0.1 target="/__hydrogen/upload" required_scope=upload token="adminonly" status=403
+event=auth_scope_denied ip=127.0.0.1 target="/__hydrogen/upload" required_scope=upload token="adminonly" status=403
 event=auth_allowed ip=127.0.0.1 target="/__hydrogen/upload" required_scope=upload token="upload" status=200
 ```
 

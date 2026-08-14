@@ -12,6 +12,9 @@ int main() {
     assert(pool.enqueue([&]{ ++counter; }));
     for (int i = 0; i < 50 && counter.load() < 3; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(20));
     assert(counter.load() == 3);
+    assert(pool.completed() == 3);
+    assert(pool.active() == 0);
+    assert(pool.workerCount() == 2);
     pool.shutdown();
     std::cout << "thread pool tests passed\n";
     return 0;

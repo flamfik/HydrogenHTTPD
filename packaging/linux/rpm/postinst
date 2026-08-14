@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+getent group hydrogenhttpd >/dev/null 2>&1 || groupadd --system hydrogenhttpd
+getent passwd hydrogenhttpd >/dev/null 2>&1 || useradd --system --gid hydrogenhttpd --home-dir /var/lib/hydrogenhttpd --shell /sbin/nologin hydrogenhttpd
+install -d -m 0750 -o root -g hydrogenhttpd /etc/hydrogenhttpd/{certs,secrets}
+install -d -m 0750 -o hydrogenhttpd -g hydrogenhttpd /var/lib/hydrogenhttpd/{www,uploads,tmp/uploads,sql} /var/log/hydrogenhttpd
+[ -f /etc/hydrogenhttpd/server.conf ] || install -m 0640 -o root -g hydrogenhttpd /usr/share/hydrogenhttpd/config/server.conf /etc/hydrogenhttpd/server.conf
+[ -f /etc/hydrogenhttpd/secrets/auth.tokens ] || install -m 0640 -o root -g hydrogenhttpd /dev/null /etc/hydrogenhttpd/secrets/auth.tokens
+if [ ! -f /var/lib/hydrogenhttpd/www/index.html ]; then
+  cp -a /usr/share/hydrogenhttpd/www/. /var/lib/hydrogenhttpd/www/
+  chown -R hydrogenhttpd:hydrogenhttpd /var/lib/hydrogenhttpd/www
+fi
+systemctl daemon-reload >/dev/null 2>&1 || true
+systemctl enable hydrogenhttpd.service >/dev/null 2>&1 || true
+/usr/bin/hydrogen_httpd --check-config --config /etc/hydrogenhttpd/server.conf >/dev/null 2>&1 && systemctl restart hydrogenhttpd.service >/dev/null 2>&1 || true
+exit 0

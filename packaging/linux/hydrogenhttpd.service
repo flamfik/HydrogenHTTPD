@@ -1,0 +1,53 @@
+[Unit]
+Description=HydrogenHttpd HTTP/HTTPS Server
+Documentation=file:/usr/share/doc/hydrogenhttpd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hydrogenhttpd
+Group=hydrogenhttpd
+WorkingDirectory=/var/lib/hydrogenhttpd
+ExecStartPre=/usr/bin/hydrogen_httpd --check-config --config /etc/hydrogenhttpd/server.conf
+ExecStart=/usr/bin/hydrogen_httpd --config /etc/hydrogenhttpd/server.conf
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+UMask=0077
+
+RuntimeDirectory=hydrogenhttpd
+RuntimeDirectoryMode=0750
+StateDirectory=hydrogenhttpd
+StateDirectoryMode=0750
+LogsDirectory=hydrogenhttpd
+LogsDirectoryMode=0750
+
+LimitNOFILE=1048576
+TasksMax=8192
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+ReadWritePaths=/var/lib/hydrogenhttpd /var/log/hydrogenhttpd /run/hydrogenhttpd
+ReadOnlyPaths=/etc/hydrogenhttpd
+
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

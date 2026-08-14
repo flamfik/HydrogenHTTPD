@@ -3,17 +3,11 @@
 
 ThreadPool::ThreadPool(std::size_t workerCount, std::size_t maxQueueSize)
     : maxQueueSize_(maxQueueSize) {
-    if (workerCount == 0) {
-        throw std::runtime_error("ThreadPool workerCount must be greater than 0");
-    }
-    if (maxQueueSize == 0) {
-        throw std::runtime_error("ThreadPool maxQueueSize must be greater than 0");
-    }
+    if (workerCount == 0) throw std::runtime_error("ThreadPool workerCount must be greater than 0");
+    if (maxQueueSize == 0) throw std::runtime_error("ThreadPool maxQueueSize must be greater than 0");
 
     workers_.reserve(workerCount);
-    for (std::size_t i = 0; i < workerCount; ++i) {
-        workers_.emplace_back(&ThreadPool::workerLoop, this);
-    }
+    for (std::size_t i = 0; i < workerCount; ++i) workers_.emplace_back(&ThreadPool::workerLoop, this);
 }
 
 ThreadPool::~ThreadPool() {
@@ -24,6 +18,7 @@ bool ThreadPool::enqueue(std::function<void()> task) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (stopping_ || tasks_.size() >= maxQueueSize_) {
+            rejected_.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
         tasks_.push(std::move(task));
@@ -35,18 +30,13 @@ bool ThreadPool::enqueue(std::function<void()> task) {
 void ThreadPool::shutdown() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (stopping_) {
-            return;
-        }
+        if (stopping_) return;
         stopping_ = true;
     }
 
     cv_.notify_all();
-
     for (auto& worker : workers_) {
-        if (worker.joinable()) {
-            worker.join();
-        }
+        if (worker.joinable()) worker.join();
     }
 }
 
@@ -58,21 +48,21 @@ std::size_t ThreadPool::queued() const {
 void ThreadPool::workerLoop() {
     while (true) {
         std::function<void()> task;
-
         {
             std::unique_lock<std::mutex> lock(mutex_);
-            cv_.wait(lock, [&] {
-                return stopping_ || !tasks_.empty();
-            });
-
-            if (stopping_ && tasks_.empty()) {
-                return;
-            }
-
+            cv_.wait(lock, [&] { return stopping_ || !tasks_.empty(); });
+            if (stopping_ && tasks_.empty()) return;
             task = std::move(tasks_.front());
             tasks_.pop();
         }
 
-        task();
+        active_.fetch_add(1, std::memory_order_relaxed);
+        try {
+            task();
+        } catch (...) {
+            // A failed connection task must not terminate a worker thread.
+        }
+        active_.fetch_sub(1, std::memory_order_relaxed);
+        completed_.fetch_add(1, std::memory_order_relaxed);
     }
 }

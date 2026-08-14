@@ -48,3 +48,11 @@ auth_token.admin = long-random-admin-token | upload,admin
 ```
 
 Avoid using the legacy `auth_bearer_token` in new deployments.
+
+
+## Authentication secrets
+
+- Use `auth_secrets_file` instead of plaintext inline tokens.
+- Set filesystem permissions so only the service account can read the token store.
+- Use token expiration and separate upload/admin scopes.
+- Enable `/__hydrogen/admin/status` only with endpoint authentication.

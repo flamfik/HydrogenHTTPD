@@ -13,6 +13,10 @@
 #include <memory>
 #include <set>
 #include <sstream>
+#ifndef HYDROGENHTTPD_VERSION
+#define HYDROGENHTTPD_VERSION "dev"
+#endif
+
 #if defined(_WIN32)
 #include <winsock2.h>
 #else
@@ -314,28 +318,80 @@ std::string lower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
 }
+
+void configureAcceptedSocket(tcp::socket& socket, const ServerConfig& config) {
+    boost::system::error_code ignored;
+    socket.set_option(tcp::no_delay(config.tcpNoDelay), ignored);
+    socket.set_option(boost::asio::socket_base::keep_alive(config.tcpKeepAlive), ignored);
+    if (config.socketReceiveBufferBytes > 0) {
+        socket.set_option(boost::asio::socket_base::receive_buffer_size(config.socketReceiveBufferBytes), ignored);
+    }
+    if (config.socketSendBufferBytes > 0) {
+        socket.set_option(boost::asio::socket_base::send_buffer_size(config.socketSendBufferBytes), ignored);
+    }
+}
+
+template <typename SyncWriteStream>
+std::size_t writeHttpResponse(SyncWriteStream& stream, const HttpResponse& response) {
+    const std::string headers = response.headersToString();
+    if (response.headOnly || response.bodySize() == 0) {
+        boost::asio::write(stream, boost::asio::buffer(headers));
+        return headers.size();
+    }
+
+    const auto& body = response.bodyData();
+    const std::array<boost::asio::const_buffer, 2> buffers{
+        boost::asio::buffer(headers),
+        boost::asio::buffer(body)
+    };
+    boost::asio::write(stream, buffers);
+    return headers.size() + body.size();
+}
 }
 
 Server::Server(boost::asio::io_context& io, ServerConfig config)
-    : io_(io), plainAcceptor_(io, tcp::endpoint(tcp::v4(), config.port)),
-      config_(std::move(config)), logger_(config_.accessLog, config_.errorLog, config_.auditLog),
-      rateLimiter_(config_.rateLimitPerMinute),
+    : io_(io), plainAcceptor_(io),
+      config_(std::move(config)),
+      authStore_(config_.authTokens, config_.authSecretsFile, config_.authHotReload, config_.authReloadIntervalSeconds),
+      logger_(config_.accessLog, config_.errorLog, config_.auditLog,
+              config_.auditRotateBytes, config_.auditRotateKeep,
+              config_.asyncAccessLog, config_.enableAccessLog,
+              config_.accessLogSampleRate, config_.accessLogQueueCapacity,
+              config_.accessLogFlushIntervalMs),
+      rateLimiter_(config_.rateLimitPerMinute, config_.rateLimiterShards),
       workers_(config_.workerThreads, config_.maxPendingConnections),
-      sqlite_(config_.sqliteDatabase) {
+      staticCache_(config_.enableStaticCache, config_.staticCacheShards,
+                   config_.staticCacheMaxEntries, config_.staticCacheMaxBytes,
+                   config_.staticCacheMaxFileBytes, config_.staticCacheRevalidateMs),
+      sqlite_(config_.sqliteDatabase),
+      startedAt_(std::chrono::steady_clock::now()) {
     config_.defaultRoot = fs::weakly_canonical(config_.defaultRoot);
     for (auto& [host, root] : config_.virtualHosts) root = fs::weakly_canonical(root);
+
+    plainAcceptor_.open(tcp::v4());
+    plainAcceptor_.set_option(boost::asio::socket_base::reuse_address(true));
+    plainAcceptor_.bind(tcp::endpoint(tcp::v4(), config_.port));
+    plainAcceptor_.listen(config_.listenBacklog);
+
 #if defined(HYDROGENHTTPD_ENABLE_TLS)
     if (config_.enableTls) {
         configureTlsContext();
-        tlsAcceptor_ = std::make_unique<tcp::acceptor>(io_, tcp::endpoint(tcp::v4(), config_.tlsPort));
+        tlsAcceptor_ = std::make_unique<tcp::acceptor>(io_);
+        tlsAcceptor_->open(tcp::v4());
+        tlsAcceptor_->set_option(boost::asio::socket_base::reuse_address(true));
+        tlsAcceptor_->bind(tcp::endpoint(tcp::v4(), config_.tlsPort));
+        tlsAcceptor_->listen(config_.listenBacklog);
     }
 #endif
 }
 
 void Server::run() {
-    std::cout << "HydrogenHttpd v1.5.88 scoped auth + audit running\n";
+    std::cout << "HydrogenHttpd v" << HYDROGENHTTPD_VERSION << " server running\n";
     std::cout << "HTTP  port: " << plainAcceptor_.local_endpoint().port() << "\n";
+    std::cout << "I/O threads: " << config_.ioThreads << "\n";
     std::cout << "Worker threads: " << config_.workerThreads << "\n";
+    std::cout << "Listen backlog: " << config_.listenBacklog << "\n";
+    std::cout << "Static cache: " << (config_.enableStaticCache ? "enabled" : "disabled") << "\n";
     std::cout << ".htaccess: " << (config_.enableHtaccess ? "enabled" : "disabled") << "\n";
     std::cout << "Force HTTPS: " << (config_.forceHttps ? "enabled" : "disabled") << "\n";
 #if defined(HYDROGENHTTPD_ENABLE_TLS)
@@ -355,6 +411,7 @@ void Server::run() {
 void Server::acceptPlain() {
     plainAcceptor_.async_accept([this](boost::system::error_code ec, tcp::socket socket) {
         if (!ec) {
+            configureAcceptedSocket(socket, config_);
             auto socketPtr = std::make_shared<tcp::socket>(std::move(socket));
             bool accepted = workers_.enqueue([this, socketPtr]() mutable { handlePlainClient(std::move(*socketPtr)); });
             if (!accepted) { logger_.error("worker_queue_full scheme=http"); boost::system::error_code ignored; socketPtr->close(ignored); }
@@ -375,6 +432,7 @@ void Server::configureTlsContext() {
 void Server::acceptTls() {
     tlsAcceptor_->async_accept([this](boost::system::error_code ec, tcp::socket socket) {
         if (!ec) {
+            configureAcceptedSocket(socket, config_);
             auto socketPtr = std::make_shared<tcp::socket>(std::move(socket));
             bool accepted = workers_.enqueue([this, socketPtr]() mutable { handleTlsClient(std::move(*socketPtr)); });
             if (!accepted) { logger_.error("worker_queue_full scheme=https"); boost::system::error_code ignored; socketPtr->close(ignored); }
@@ -388,16 +446,16 @@ void Server::handlePlainClient(tcp::socket socket) {
     std::string clientIp = "unknown";
     try {
         clientIp = socket.remote_endpoint().address().to_string();
-        if (!rateLimiter_.allow("http:" + clientIp)) {
+        if (config_.enableRateLimiter && !rateLimiter_.allow("http:" + clientIp)) {
             HttpResponse res; res.exposeServerHeader = config_.exposeServerHeader; res.status = 429; res.reason = "Too Many Requests"; res.body = "429 Too Many Requests\n";
-            auto response = res.toString(); boost::asio::write(socket, boost::asio::buffer(response));
-            logger_.access(clientIp, "http", "-", "-", 429, response.size()); return;
+            const auto bytes = writeHttpResponse(socket, res);
+            logger_.access(clientIp, "http", "-", "-", 429, bytes); return;
         }
         setReceiveTimeout(socket.native_handle(), config_.readTimeoutSeconds);
         int status = 500; std::string method = "-", target = "-";
         auto response = handleClientStream(socket, false, clientIp, status, method, target);
-        boost::asio::write(socket, boost::asio::buffer(response));
-        logger_.access(clientIp, "http", method, target, status, response.size());
+        const auto bytes = writeHttpResponse(socket, response);
+        logger_.access(clientIp, "http", method, target, status, bytes);
         boost::system::error_code ignored; socket.shutdown(tcp::socket::shutdown_both, ignored); socket.close(ignored);
     } catch (const std::exception& e) {
         logger_.error("scheme=http client=" + clientIp + " error=\"" + e.what() + "\"");
@@ -414,16 +472,16 @@ void Server::handleTlsClient(tcp::socket socket) {
         boost::asio::ssl::stream<tcp::socket> stream(std::move(socket), *tlsContext_);
         stream.handshake(boost::asio::ssl::stream_base::server);
 
-        if (!rateLimiter_.allow("https:" + clientIp)) {
+        if (config_.enableRateLimiter && !rateLimiter_.allow("https:" + clientIp)) {
             HttpResponse res; res.exposeServerHeader = config_.exposeServerHeader; res.tls = true; res.status = 429; res.reason = "Too Many Requests"; res.body = "429 Too Many Requests\n";
-            auto response = res.toString(); boost::asio::write(stream, boost::asio::buffer(response));
-            logger_.access(clientIp, "https", "-", "-", 429, response.size()); return;
+            const auto bytes = writeHttpResponse(stream, res);
+            logger_.access(clientIp, "https", "-", "-", 429, bytes); return;
         }
 
         int status = 500; std::string method = "-", target = "-";
         auto response = handleClientStream(stream, true, clientIp, status, method, target);
-        boost::asio::write(stream, boost::asio::buffer(response));
-        logger_.access(clientIp, "https", method, target, status, response.size());
+        const auto bytes = writeHttpResponse(stream, response);
+        logger_.access(clientIp, "https", method, target, status, bytes);
         boost::system::error_code ignored; stream.shutdown(ignored); stream.lowest_layer().close(ignored);
     } catch (const std::exception& e) {
         logger_.error("scheme=https client=" + clientIp + " error=\"" + e.what() + "\"");
@@ -433,7 +491,7 @@ void Server::handleTlsClient(tcp::socket socket) {
 
 
 template <typename SyncReadStream>
-std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const std::string& clientIp, int& statusOut, std::string& methodOut, std::string& targetOut) {
+HttpResponse Server::handleClientStream(SyncReadStream& stream, bool tls, const std::string& clientIp, int& statusOut, std::string& methodOut, std::string& targetOut) {
     auto headers = readHeadersOnly(stream, config_);
 
     HttpParseLimits limits{
@@ -453,12 +511,56 @@ std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const s
         res.reason = parsed.reason;
         res.body = parsed.message;
         statusOut = res.status;
-        return res.toString();
+        return res;
     }
 
     HttpRequest req = std::move(parsed.request);
     methodOut = req.method.empty() ? "-" : req.method;
     targetOut = req.target.empty() ? "-" : req.target;
+
+    if (req.target == config_.adminStatusEndpoint) {
+        HttpResponse res;
+        res.tls = tls;
+        res.exposeServerHeader = config_.exposeServerHeader;
+
+        if (!config_.enableAdminStatus) {
+            res.status = 404;
+            res.reason = "Not Found";
+            res.body = "404 Not Found\n";
+            statusOut = res.status;
+            return res;
+        }
+
+        if (req.method != "GET") {
+            res.status = 405;
+            res.reason = "Method Not Allowed";
+            res.body = "405 Method Not Allowed\n";
+            statusOut = res.status;
+            return res;
+        }
+
+        const auto decision = authorizeEndpoint(req, "admin");
+        if (!decision.allowed()) {
+            if (decision.code == AuthDecisionCode::Missing) {
+                auditEndpointEvent("auth_missing", clientIp, req.target, "admin", "-", 401);
+                return unauthorizedResponse(tls, statusOut);
+            }
+            if (decision.code == AuthDecisionCode::InsufficientScope) {
+                auditEndpointEvent("auth_scope_denied", clientIp, req.target, "admin", decision.tokenName, 403);
+                return forbiddenResponse(tls, statusOut);
+            }
+            if (decision.code == AuthDecisionCode::Expired) {
+                auditEndpointEvent("auth_expired", clientIp, req.target, "admin", decision.tokenName, 401);
+                return unauthorizedResponse(tls, statusOut, true);
+            }
+
+            auditEndpointEvent("auth_invalid", clientIp, req.target, "admin", "unknown", 401);
+            return unauthorizedResponse(tls, statusOut, true);
+        }
+
+        auditEndpointEvent("auth_allowed", clientIp, req.target, "admin", decision.tokenName, 200);
+        return adminStatusResponse(tls, statusOut);
+    }
 
     if (req.target == config_.uploadEndpoint) {
         HttpResponse res;
@@ -470,7 +572,7 @@ std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const s
             res.reason = "Not Found";
             res.body = "404 Not Found\n";
             statusOut = res.status;
-            return res.toString();
+            return res;
         }
 
         if (req.method != "POST") {
@@ -478,22 +580,29 @@ std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const s
             res.reason = "Method Not Allowed";
             res.body = "405 Method Not Allowed\n";
             statusOut = res.status;
-            return res.toString();
+            return res;
         }
 
-        std::string tokenName;
-        if (!isEndpointAuthorized(req, "upload", tokenName)) {
-            auto authHeader = req.headers.find("authorization");
-            if (authHeader == req.headers.end()) {
+        const auto decision = authorizeEndpoint(req, "upload");
+        if (!decision.allowed()) {
+            if (decision.code == AuthDecisionCode::Missing) {
                 auditEndpointEvent("auth_missing", clientIp, req.target, "upload", "-", 401);
                 return unauthorizedResponse(tls, statusOut);
             }
+            if (decision.code == AuthDecisionCode::InsufficientScope) {
+                auditEndpointEvent("auth_scope_denied", clientIp, req.target, "upload", decision.tokenName, 403);
+                return forbiddenResponse(tls, statusOut);
+            }
+            if (decision.code == AuthDecisionCode::Expired) {
+                auditEndpointEvent("auth_expired", clientIp, req.target, "upload", decision.tokenName, 401);
+                return unauthorizedResponse(tls, statusOut, true);
+            }
 
-            auditEndpointEvent("auth_denied", clientIp, req.target, "upload", tokenName.empty() ? "unknown" : tokenName, 403);
-            return forbiddenResponse(tls, statusOut);
+            auditEndpointEvent("auth_invalid", clientIp, req.target, "upload", "unknown", 401);
+            return unauthorizedResponse(tls, statusOut, true);
         }
 
-        auditEndpointEvent("auth_allowed", clientIp, req.target, "upload", tokenName, 200);
+        auditEndpointEvent("auth_allowed", clientIp, req.target, "upload", decision.tokenName, 200);
 
         auto ct = req.headers.find("content-type");
         if (ct == req.headers.end()) {
@@ -501,7 +610,7 @@ std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const s
             res.reason = "Unsupported Media Type";
             res.body = "415 Unsupported Media Type\n";
             statusOut = res.status;
-            return res.toString();
+            return res;
         }
 
         if (!req.hasContentLength || req.contentLength == 0) {
@@ -509,7 +618,7 @@ std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const s
             res.reason = "Bad Request";
             res.body = "400 Bad Request\n";
             statusOut = res.status;
-            return res.toString();
+            return res;
         }
 
         if (req.contentLength > config_.maxBodyBytes) {
@@ -517,7 +626,7 @@ std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const s
             res.reason = "Payload Too Large";
             res.body = "413 Payload Too Large\n";
             statusOut = res.status;
-            return res.toString();
+            return res;
         }
 
         std::filesystem::create_directories(config_.uploadSpoolDirectory);
@@ -554,7 +663,7 @@ std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const s
                 res.reason = "Bad Request";
                 res.body = "400 Bad Request\n";
                 statusOut = res.status;
-                return res.toString();
+                return res;
             }
 
             MultipartLimits uploadLimits{
@@ -574,7 +683,7 @@ std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const s
                 else res.reason = "Bad Request";
                 res.body = std::to_string(res.status) + " " + res.reason + "\n";
                 statusOut = res.status;
-                return res.toString();
+                return res;
             }
 
             std::ostringstream json;
@@ -599,7 +708,7 @@ std::string Server::handleClientStream(SyncReadStream& stream, bool tls, const s
             res.contentType = "application/json; charset=utf-8";
             res.body = json.str();
             statusOut = res.status;
-            return res.toString();
+            return res;
         } catch (...) {
             std::filesystem::remove(spoolPath);
             throw;
@@ -616,9 +725,9 @@ std::string Server::readPlainRequest(tcp::socket& socket) { return readRequestWi
 std::string Server::readTlsRequest(boost::asio::ssl::stream<tcp::socket>& stream) { return readRequestWithBody(stream, config_); }
 #endif
 
-std::string Server::makeResponse(const std::string& rawRequest, bool tls, int& statusOut, std::string& methodOut, std::string& targetOut) {
+HttpResponse Server::makeResponse(const std::string& rawRequest, bool tls, int& statusOut, std::string& methodOut, std::string& targetOut) {
     HttpResponse res; res.tls = tls; res.exposeServerHeader = config_.exposeServerHeader;
-    auto finish = [&]() { statusOut = res.status; return res.toString(); };
+    auto finish = [&]() { statusOut = res.status; return res; };
 
     if (rawRequest.empty() || rawRequest.size() > config_.maxRequestBytes) { res.status = 400; res.reason = "Bad Request"; res.body = "400 Bad Request\n"; return finish(); }
 
@@ -697,13 +806,34 @@ std::string Server::makeResponse(const std::string& rawRequest, bool tls, int& s
     }
 
     res.contentType = mimeType(*safePath);
-    res.body = readFile(*safePath);
+    res.cacheControl = config_.staticCacheControl;
+
+    auto cached = staticCache_.get(*safePath);
+    if (!cached || !cached->body) {
+        res.status = 500;
+        res.reason = "Internal Server Error";
+        res.cacheControl = "no-store";
+        res.body = "500 Internal Server Error\n";
+        return finish();
+    }
+
+    res.extraHeaders["ETag"] = cached->etag;
+    auto inm = req.headers.find("if-none-match");
+    if (inm != req.headers.end() && inm->second == cached->etag) {
+        res.status = 304;
+        res.reason = "Not Modified";
+        res.body.clear();
+        res.sharedBody.reset();
+        return finish();
+    }
+
+    res.sharedBody = cached->body;
     return finish();
 }
 
 
-std::string Server::handleUploadRequest(const HttpRequest& req, HttpResponse& res, int& statusOut) {
-    auto finish = [&]() { statusOut = res.status; return res.toString(); };
+HttpResponse Server::handleUploadRequest(const HttpRequest& req, HttpResponse res, int& statusOut) {
+    auto finish = [&]() { statusOut = res.status; return res; };
 
     if (!config_.enableUploads) {
         res.status = 404;
@@ -719,9 +849,10 @@ std::string Server::handleUploadRequest(const HttpRequest& req, HttpResponse& re
         return finish();
     }
 
-    std::string tokenName;
-    if (!isEndpointAuthorized(req, "upload", tokenName)) {
-        return unauthorizedResponse(res.tls, statusOut);
+    const auto decision = authorizeEndpoint(req, "upload");
+    if (!decision.allowed()) {
+        if (decision.code == AuthDecisionCode::InsufficientScope) return forbiddenResponse(res.tls, statusOut);
+        return unauthorizedResponse(res.tls, statusOut, decision.code != AuthDecisionCode::Missing);
     }
 
     auto ct = req.headers.find("content-type");
@@ -774,58 +905,53 @@ std::string Server::handleUploadRequest(const HttpRequest& req, HttpResponse& re
 
 
 
-bool Server::hasScope(const AuthTokenRule& token, const std::string& requiredScope) const {
-    for (const auto& scope : token.scopes) {
-        if (scope == "*" || scope == requiredScope) return true;
-    }
-    return false;
-}
-
-bool Server::isEndpointAuthorized(const HttpRequest& req, const std::string& requiredScope, std::string& tokenName) const {
-    tokenName.clear();
-
-    if (!config_.enableEndpointAuth) {
-        tokenName = "auth-disabled";
-        return true;
-    }
+AuthDecision Server::authorizeEndpoint(const HttpRequest& req, const std::string& requiredScope) {
+    if (!config_.enableEndpointAuth) return {AuthDecisionCode::Allowed, "auth-disabled"};
 
     auto it = req.headers.find("authorization");
-    if (it == req.headers.end()) return false;
+    const std::string header = it == req.headers.end() ? std::string{} : it->second;
+    const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
-    const std::string prefix = "Bearer ";
-    if (it->second.rfind(prefix, 0) != 0) return false;
+    AuthReloadResult reload;
+    auto decision = authStore_.authorize(
+        header,
+        config_.authBearerToken,
+        requiredScope,
+        static_cast<std::int64_t>(now),
+        &reload
+    );
 
-    std::string presented = it->second.substr(prefix.size());
-
-    for (const auto& token : config_.authTokens) {
-        if (presented == token.token) {
-            tokenName = token.name;
-            return hasScope(token, requiredScope);
-        }
+    if (reload.code == AuthReloadCode::Reloaded) {
+        logger_.audit(
+            "event=auth_store_reloaded"
+            " generation=" + std::to_string(reload.generation) +
+            " token_count=" + std::to_string(reload.tokenCount)
+        );
+    } else if (reload.code == AuthReloadCode::Failed) {
+        logger_.error("auth_store_reload_failed error=\"" + reload.message + "\"");
+        logger_.audit(
+            "event=auth_store_reload_failed"
+            " generation=" + std::to_string(reload.generation) +
+            " token_count=" + std::to_string(reload.tokenCount)
+        );
     }
 
-    // Backward-compatible legacy token. Treated as broad admin/upload token.
-    if (!config_.authBearerToken.empty() && presented == config_.authBearerToken) {
-        tokenName = "legacy";
-        return true;
-    }
-
-    return false;
+    return decision;
 }
 
-std::string Server::unauthorizedResponse(bool tls, int& statusOut) const {
+HttpResponse Server::unauthorizedResponse(bool tls, int& statusOut, bool invalidToken) const {
     HttpResponse res;
     res.tls = tls;
     res.exposeServerHeader = config_.exposeServerHeader;
     res.status = 401;
     res.reason = "Unauthorized";
     res.body = "401 Unauthorized\n";
-    res.extraHeaders["WWW-Authenticate"] = "Bearer";
+    res.extraHeaders["WWW-Authenticate"] = invalidToken ? "Bearer error=\"invalid_token\"" : "Bearer";
     statusOut = res.status;
-    return res.toString();
+    return res;
 }
 
-std::string Server::forbiddenResponse(bool tls, int& statusOut) const {
+HttpResponse Server::forbiddenResponse(bool tls, int& statusOut) const {
     HttpResponse res;
     res.tls = tls;
     res.exposeServerHeader = config_.exposeServerHeader;
@@ -833,7 +959,53 @@ std::string Server::forbiddenResponse(bool tls, int& statusOut) const {
     res.reason = "Forbidden";
     res.body = "403 Forbidden\n";
     statusOut = res.status;
-    return res.toString();
+    return res;
+}
+
+HttpResponse Server::adminStatusResponse(bool tls, int& statusOut) const {
+    const auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - startedAt_
+    ).count();
+
+    HttpResponse res;
+    res.tls = tls;
+    res.exposeServerHeader = config_.exposeServerHeader;
+    res.status = 200;
+    res.reason = "OK";
+    res.contentType = "application/json; charset=utf-8";
+
+    std::ostringstream json;
+    json << "{";
+    json << "\"service\":\"HydrogenHttpd\",";
+    json << "\"version\":\"" << HYDROGENHTTPD_VERSION << "\",";
+    json << "\"uptime_seconds\":" << uptime << ",";
+    json << "\"worker_threads\":" << config_.workerThreads << ",";
+    json << "\"queued_tasks\":" << workers_.queued() << ",";
+    json << "\"active_workers\":" << workers_.active() << ",";
+    json << "\"completed_tasks\":" << workers_.completed() << ",";
+    json << "\"rejected_tasks\":" << workers_.rejected() << ",";
+    json << "\"max_pending_connections\":" << config_.maxPendingConnections << ",";
+    json << "\"rate_limiter_enabled\":" << (config_.enableRateLimiter ? "true" : "false") << ",";
+    json << "\"rate_limiter_buckets\":" << rateLimiter_.bucketCount() << ",";
+    json << "\"dropped_access_logs\":" << logger_.droppedAccessLogs() << ",";
+    json << "\"static_cache_entries\":" << staticCache_.entries() << ",";
+    json << "\"static_cache_bytes\":" << staticCache_.bytes() << ",";
+    json << "\"static_cache_hits\":" << staticCache_.hits() << ",";
+    json << "\"static_cache_misses\":" << staticCache_.misses() << ",";
+    json << "\"static_cache_evictions\":" << staticCache_.evictions() << ",";
+    json << "\"tls_enabled\":" << (config_.enableTls ? "true" : "false") << ",";
+    json << "\"uploads_enabled\":" << (config_.enableUploads ? "true" : "false") << ",";
+    json << "\"php_enabled\":" << (config_.enablePhp ? "true" : "false") << ",";
+    json << "\"endpoint_auth_enabled\":" << (config_.enableEndpointAuth ? "true" : "false") << ",";
+    json << "\"configured_token_rules\":" << authStore_.tokenCount() << ",";
+    json << "\"auth_store_generation\":" << authStore_.generation() << ",";
+    json << "\"auth_last_reload_epoch\":" << authStore_.lastSuccessfulReloadEpoch() << ",";
+    json << "\"auth_hot_reload_enabled\":" << (authStore_.hotReloadEnabled() ? "true" : "false");
+    json << "}";
+
+    res.body = json.str();
+    statusOut = res.status;
+    return res;
 }
 
 void Server::auditEndpointEvent(
@@ -853,7 +1025,6 @@ void Server::auditEndpointEvent(
         " status=" + std::to_string(status)
     );
 }
-
 
 fs::path Server::selectDocumentRoot(const std::string& host) const {
     auto normalized = security::normalizeHost(host);

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import socket
 import subprocess
@@ -91,6 +92,17 @@ def main() -> int:
         logs.mkdir()
         (www / "index.html").write_text("ok", encoding="utf-8")
 
+        def token_hash(value: str) -> str:
+            return hashlib.sha256(value.encode()).hexdigest()
+
+        secrets = work / "auth.tokens"
+        secrets.write_text("\n".join([
+            f"token.upload = sha256:{token_hash('upload-secret')} | upload | never",
+            f"token.adminonly = sha256:{token_hash('admin-only-secret')} | admin | never",
+            f"token.fulladmin = sha256:{token_hash('full-admin-secret')} | upload,admin | never",
+            "",
+        ]), encoding="utf-8")
+
         cfg = work / "server.conf"
         cfg.write_text("\n".join([
             "port = 18085",
@@ -119,9 +131,7 @@ def main() -> int:
             "max_upload_field_bytes = 32",
             "enable_endpoint_auth = true",
             f"audit_log = {logs / 'audit.log'}",
-            "auth_token.upload = upload-secret | upload",
-            "auth_token.adminonly = admin-only-secret | admin",
-            "auth_token.fulladmin = full-admin-secret | upload,admin",
+            "auth_secrets_file = auth.tokens",
             f"vhost.localhost = {www}",
             "",
         ]), encoding="utf-8")
@@ -133,7 +143,7 @@ def main() -> int:
             body = multipart("abc", "notes.txt", b"hello-stream-auth")
 
             assert_status(send_raw(18085, request("/__hydrogen/upload", body, "abc", None)), 401, "missing token")
-            assert_status(send_raw(18085, request("/__hydrogen/upload", body, "abc", "wrong-token")), 403, "wrong token")
+            assert_status(send_raw(18085, request("/__hydrogen/upload", body, "abc", "wrong-token")), 401, "wrong token")
             assert_status(send_raw(18085, request("/__hydrogen/upload", body, "abc", "admin-only-secret")), 403, "token without upload scope")
 
             res = send_raw(18085, request("/__hydrogen/upload", body, "abc", "upload-secret"))
@@ -152,7 +162,8 @@ def main() -> int:
 
             audit_text = (logs / "audit.log").read_text(encoding="utf-8")
             assert "event=auth_missing" in audit_text
-            assert "event=auth_denied" in audit_text
+            assert "event=auth_invalid" in audit_text
+            assert "event=auth_scope_denied" in audit_text
             assert "event=auth_allowed" in audit_text
             assert "required_scope=upload" in audit_text
             assert "token=\"upload\"" in audit_text

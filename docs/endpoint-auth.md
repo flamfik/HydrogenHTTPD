@@ -1,6 +1,6 @@
 # Endpoint Authorization
 
-HydrogenHttpd v1.5.88 adds a small authorization baseline for protected internal endpoints.
+HydrogenHttpd v1.6.0 adds a small authorization baseline for protected internal endpoints.
 
 At this stage it protects the upload endpoint.
 
@@ -65,3 +65,20 @@ auth_token.admin = admin-secret | upload,admin
 ```
 
 The upload endpoint requires the `upload` scope.
+
+
+## v1.6.0 hashed token store
+
+Recommended configuration:
+
+```ini
+enable_endpoint_auth = true
+auth_secrets_file = secrets/auth.tokens
+```
+
+```ini
+token.upload = sha256:<hash> | upload | never
+token.admin = sha256:<hash> | upload,admin | <unix-expiry>
+```
+
+Authorization now distinguishes missing, invalid, expired and insufficient-scope tokens.

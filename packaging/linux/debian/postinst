@@ -1,0 +1,56 @@
+#!/bin/sh
+set -e
+
+if ! getent group hydrogenhttpd >/dev/null 2>&1; then
+    addgroup --system hydrogenhttpd >/dev/null
+fi
+
+if ! getent passwd hydrogenhttpd >/dev/null 2>&1; then
+    adduser \
+        --system \
+        --ingroup hydrogenhttpd \
+        --home /var/lib/hydrogenhttpd \
+        --no-create-home \
+        --shell /usr/sbin/nologin \
+        hydrogenhttpd >/dev/null
+fi
+
+install -d -m 0750 -o root -g hydrogenhttpd /etc/hydrogenhttpd
+install -d -m 0750 -o root -g hydrogenhttpd /etc/hydrogenhttpd/certs
+install -d -m 0750 -o root -g hydrogenhttpd /etc/hydrogenhttpd/secrets
+install -d -m 0750 -o hydrogenhttpd -g hydrogenhttpd /var/lib/hydrogenhttpd
+install -d -m 0750 -o hydrogenhttpd -g hydrogenhttpd /var/lib/hydrogenhttpd/www
+install -d -m 0750 -o hydrogenhttpd -g hydrogenhttpd /var/lib/hydrogenhttpd/uploads
+install -d -m 0750 -o hydrogenhttpd -g hydrogenhttpd /var/lib/hydrogenhttpd/tmp/uploads
+install -d -m 0750 -o hydrogenhttpd -g hydrogenhttpd /var/lib/hydrogenhttpd/sql
+install -d -m 0750 -o hydrogenhttpd -g hydrogenhttpd /var/log/hydrogenhttpd
+
+if [ ! -f /etc/hydrogenhttpd/server.conf ]; then
+    install -m 0640 -o root -g hydrogenhttpd \
+        /usr/share/hydrogenhttpd/config/server.conf \
+        /etc/hydrogenhttpd/server.conf
+fi
+
+if [ ! -f /etc/hydrogenhttpd/secrets/auth.tokens ]; then
+    install -m 0640 -o root -g hydrogenhttpd /dev/null \
+        /etc/hydrogenhttpd/secrets/auth.tokens
+fi
+
+if [ ! -f /var/lib/hydrogenhttpd/www/index.html ]; then
+    cp -a /usr/share/hydrogenhttpd/www/. /var/lib/hydrogenhttpd/www/
+    chown -R hydrogenhttpd:hydrogenhttpd /var/lib/hydrogenhttpd/www
+fi
+
+if command -v systemd-tmpfiles >/dev/null 2>&1; then
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/hydrogenhttpd.conf || true
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || true
+    systemctl enable hydrogenhttpd.service >/dev/null 2>&1 || true
+    if /usr/bin/hydrogen_httpd --check-config --config /etc/hydrogenhttpd/server.conf; then
+        systemctl restart hydrogenhttpd.service >/dev/null 2>&1 || true
+    fi
+fi
+
+exit 0

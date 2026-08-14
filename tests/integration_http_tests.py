@@ -67,6 +67,13 @@ def main():
             assert_status(res, 200)
             assert b"Server: HydrogenHttpd" in res
             assert b"X-Test: yes" in res
+            etag_lines = [line for line in res.split(b"\r\n") if line.lower().startswith(b"etag:")]
+            assert len(etag_lines) == 1
+            etag = etag_lines[0].split(b":", 1)[1].strip()
+            conditional = b"GET / HTTP/1.1\r\nHost: localhost\r\nIf-None-Match: " + etag + b"\r\n\r\n"
+            cached_res = send_raw(18080, conditional)
+            assert_status(cached_res, 304)
+            assert cached_res.endswith(b"\r\n\r\n")
             res = send_raw(18080, b"GET /.htaccess HTTP/1.1\r\nHost: localhost\r\n\r\n")
             assert_status(res, 403)
             res = send_raw(18080, b"GET /private/secret.txt HTTP/1.1\r\nHost: localhost\r\n\r\n")

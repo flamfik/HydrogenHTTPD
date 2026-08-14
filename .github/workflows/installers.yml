@@ -1,0 +1,230 @@
+name: Build Installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux DEB and TGZ
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            g++ \
+            libboost-dev \
+            libssl-dev \
+            libsqlite3-dev \
+            python3 \
+            openssl \
+            dpkg-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DHYDROGENHTTPD_BUILD_TESTS=ON \
+            -DHYDROGENHTTPD_ENABLE_TLS=ON \
+            -DHYDROGENHTTPD_ENABLE_SQLITE=ON \
+            -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+      - name: Build and test
+        run: |
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Build packages
+        run: |
+          mkdir -p dist
+          cpack --config build/CPackConfig.cmake -G DEB
+          mv ./*.deb dist/
+          ./packaging/linux/build_portable.sh "$PWD/build" "$PWD/dist"
+          cd dist
+          sha256sum * > SHA256SUMS
+
+      - name: Upload Linux installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: HydrogenHttpd-1.9.0-Linux
+          path: dist/*
+          if-no-files-found: error
+
+  rpm:
+    name: Linux RPM
+    runs-on: ubuntu-latest
+    container: rockylinux:9
+
+    steps:
+      - name: Install tools
+        run: |
+          dnf install -y git cmake ninja-build gcc-c++ boost-devel openssl-devel sqlite-devel rpm-build python3
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DHYDROGENHTTPD_BUILD_TESTS=ON \
+            -DHYDROGENHTTPD_ENABLE_TLS=ON \
+            -DHYDROGENHTTPD_ENABLE_SQLITE=ON \
+            -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+      - name: Build and test
+        run: |
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Build RPM
+        run: |
+          mkdir -p dist
+          cpack --config build/CPackConfig.cmake -G RPM
+          mv ./*.rpm dist/
+          cd dist
+          sha256sum * > SHA256SUMS
+
+      - name: Upload RPM
+        uses: actions/upload-artifact@v4
+        with:
+          name: HydrogenHttpd-1.9.0-RPM
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows Setup and Portable ZIP
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        shell: pwsh
+        run: |
+          choco install ninja nsis -y --no-progress
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
+            boost-headers:x64-windows-static `
+            openssl:x64-windows-static `
+            sqlite3:x64-windows-static
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
+            -DOPENSSL_USE_STATIC_LIBS=TRUE `
+            -DHYDROGENHTTPD_BUILD_TESTS=ON `
+            -DHYDROGENHTTPD_ENABLE_TLS=ON `
+            -DHYDROGENHTTPD_ENABLE_SQLITE=ON `
+            -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+      - name: Build and test
+        shell: pwsh
+        run: |
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Stage installation
+        shell: pwsh
+        run: |
+          cmake --install build --prefix "$PWD/stage"
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          .\packaging\windows\build_installer.ps1 `
+            -StageDirectory "$PWD\stage" `
+            -OutputDirectory "$PWD\dist"
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: HydrogenHttpd-1.9.0-Windows-x64
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS PKG
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-13
+          - macos-14
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install cmake ninja boost openssl@3 sqlite3
+
+      - name: Configure
+        run: |
+          OPENSSL_PREFIX="$(brew --prefix openssl@3)"
+          SQLITE_PREFIX="$(brew --prefix sqlite3)"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOPENSSL_ROOT_DIR="$OPENSSL_PREFIX" \
+            -DOPENSSL_USE_STATIC_LIBS=TRUE \
+            -DOPENSSL_SSL_LIBRARY="$OPENSSL_PREFIX/lib/libssl.a" \
+            -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_PREFIX/lib/libcrypto.a" \
+            -DSQLite3_INCLUDE_DIR="$SQLITE_PREFIX/include" \
+            -DSQLite3_LIBRARY="$SQLITE_PREFIX/lib/libsqlite3.a" \
+            -DHYDROGENHTTPD_BUILD_TESTS=ON \
+            -DHYDROGENHTTPD_ENABLE_TLS=ON \
+            -DHYDROGENHTTPD_ENABLE_SQLITE=ON \
+            -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+      - name: Build and test
+        run: |
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Stage installation
+        run: |
+          mkdir -p stage dist
+          DESTDIR="$PWD/stage" cmake --install build --prefix /usr/local
+
+      - name: Build macOS package
+        run: |
+          ARCH="$(uname -m)"
+          ./packaging/macos/build_pkg.sh "$PWD/stage" "$PWD/dist" "$ARCH"
+          tar -C stage -czf "dist/HydrogenHttpd-1.9.0-macOS-${ARCH}-Portable.tar.gz" .
+          shasum -a 256 "dist/HydrogenHttpd-1.9.0-macOS-${ARCH}-Portable.tar.gz" \
+            > "dist/HydrogenHttpd-1.9.0-macOS-${ARCH}-Portable.tar.gz.sha256"
+
+      - name: Upload macOS installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: HydrogenHttpd-1.9.0-${{ matrix.runner }}
+          path: dist/*
+          if-no-files-found: error

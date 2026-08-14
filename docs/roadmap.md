@@ -2,7 +2,6 @@
 
 ## Near term
 
-- Streaming uploads to disk without buffering full body
 - Better FastCGI response header mapping
 - HTTPS integration test improvements
 - Per-vhost PHP-FPM configuration
@@ -43,7 +42,16 @@
 
 ## After v0.14
 
-- Upload authentication and authorization.
 - Per-directory upload policy.
 - Quotas and cleanup jobs.
 - Optional content scanning hook.
+
+
+## After v1.6.0
+
+- Reload token store without full server restart.
+- Hashed-token identifiers and revocation lists.
+- Per-token rate limits and upload quotas.
+- Audit log rotation and structured JSON audit format.
+- Optional mTLS for administrative endpoints.
+- Health/readiness separation for orchestration platforms.

@@ -1,0 +1,7 @@
+d /var/lib/hydrogenhttpd 0750 hydrogenhttpd hydrogenhttpd -
+d /var/lib/hydrogenhttpd/www 0750 hydrogenhttpd hydrogenhttpd -
+d /var/lib/hydrogenhttpd/uploads 0750 hydrogenhttpd hydrogenhttpd -
+d /var/lib/hydrogenhttpd/tmp/uploads 0750 hydrogenhttpd hydrogenhttpd -
+d /var/lib/hydrogenhttpd/sql 0750 hydrogenhttpd hydrogenhttpd -
+d /var/log/hydrogenhttpd 0750 hydrogenhttpd hydrogenhttpd -
+d /run/hydrogenhttpd 0750 hydrogenhttpd hydrogenhttpd -

@@ -1,15 +1,11 @@
 #pragma once
+#include "Auth.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-struct AuthTokenRule {
-    std::string name;
-    std::string token;
-    std::vector<std::string> scopes;
-};
 
 struct ServerConfig {
     unsigned short port = 8080;
@@ -27,6 +23,11 @@ struct ServerConfig {
     std::filesystem::path accessLog = "logs/access.log";
     std::filesystem::path errorLog = "logs/error.log";
     std::filesystem::path auditLog = "logs/audit.log";
+    std::uintmax_t auditRotateBytes = 10 * 1024 * 1024;
+    std::size_t auditRotateKeep = 5;
+    std::filesystem::path authSecretsFile;
+    bool authHotReload = true;
+    unsigned int authReloadIntervalSeconds = 0;
 
     std::size_t maxRequestBytes = 16 * 1024;
     std::size_t maxBodyBytes = 1024 * 1024;
@@ -34,11 +35,34 @@ struct ServerConfig {
     std::size_t maxHeaders = 100;
     std::size_t maxUriBytes = 2048;
     std::size_t maxMethodBytes = 16;
+    bool enableRateLimiter = true;
     std::size_t rateLimitPerMinute = 120;
+    std::size_t rateLimiterShards = 64;
     unsigned int readTimeoutSeconds = 5;
 
-    std::size_t workerThreads = 4;
-    std::size_t maxPendingConnections = 256;
+    std::size_t ioThreads = 2;
+    std::size_t workerThreads = 0;
+    std::size_t workerThreadMultiplier = 4;
+    std::size_t maxPendingConnections = 4096;
+    int listenBacklog = 4096;
+    bool tcpNoDelay = true;
+    bool tcpKeepAlive = true;
+    int socketReceiveBufferBytes = 0;
+    int socketSendBufferBytes = 0;
+
+    bool asyncAccessLog = true;
+    bool enableAccessLog = true;
+    std::size_t accessLogSampleRate = 1;
+    std::size_t accessLogQueueCapacity = 65536;
+    unsigned int accessLogFlushIntervalMs = 100;
+
+    bool enableStaticCache = true;
+    std::size_t staticCacheShards = 32;
+    std::size_t staticCacheMaxEntries = 4096;
+    std::uintmax_t staticCacheMaxBytes = 256ULL * 1024ULL * 1024ULL;
+    std::uintmax_t staticCacheMaxFileBytes = 4ULL * 1024ULL * 1024ULL;
+    unsigned int staticCacheRevalidateMs = 1000;
+    std::string staticCacheControl = "public, max-age=60";
 
     bool denyHiddenFiles = true;
     bool allowDotWellKnown = true;
@@ -69,6 +93,9 @@ struct ServerConfig {
     bool enableEndpointAuth = false;
     std::string authBearerToken;
     std::vector<AuthTokenRule> authTokens;
+
+    bool enableAdminStatus = false;
+    std::string adminStatusEndpoint = "/__hydrogen/admin/status";
 
     std::unordered_map<std::string, std::filesystem::path> virtualHosts;
 };
