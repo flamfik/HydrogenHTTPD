@@ -1,0 +1,9 @@
+{
+  "name": "hydrogenhttpd",
+  "version-string": "1.9.0",
+  "dependencies": [
+    "boost-headers",
+    "openssl",
+    "sqlite3"
+  ]
+}

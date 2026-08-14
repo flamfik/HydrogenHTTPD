@@ -1,5 +1,91 @@
 # Changelog
 
+## v1.9.0 Cross-Platform Installer Edition
+
+- Added configuration-relative filesystem path resolution.
+- Added shared application launcher with `--config`, `--check-config`, `--version` and `--help`.
+- Added graceful SIGINT/SIGTERM handling on Linux and macOS.
+- Added native Windows Service integration using the Windows Service Control Manager.
+- Added elevated PowerShell service installation and uninstallation scripts.
+- Added NSIS Windows setup definition and portable ZIP builder.
+- Added hardened systemd unit, tmpfiles and logrotate integration.
+- Added Debian DEB packaging with lifecycle scripts.
+- Added RPM packaging scripts and Rocky Linux build workflow.
+- Added portable Linux TGZ builder.
+- Added macOS LaunchDaemon, dedicated service-user creation and native PKG builder.
+- Added cross-platform GitHub Actions installer workflow.
+- Added platform-specific installed configuration templates.
+- Default installed webroot now contains only `index.html`.
+- Added installation and installer-building documentation.
+- Verified 21/21 tests with TLS/SQLite.
+- Verified 19/19 tests without TLS/SQLite.
+
+
+## v1.8.0 High Load Baseline
+
+- Added sharded `StaticFileCache` with concurrent read locks.
+- Added bounded entry, byte and file-size cache limits.
+- Added configurable cache revalidation interval.
+- Added ETag generation and `If-None-Match` / `304 Not Modified` support.
+- Changed static response writes to separate header/body buffers to avoid rebuilding a second full response string.
+- Added asynchronous bounded access logging with batch flush.
+- Added access-log sampling, disable switch and dropped-line metric.
+- Added sharded rate limiter and idle-bucket cleanup.
+- Added optional local rate-limiter disable switch for trusted upstream deployments.
+- Added automatic worker sizing with `worker_threads = 0`.
+- Added configurable `io_threads`, listen backlog and socket options.
+- Added thread-pool active/completed/rejected metrics.
+- Added static-cache and logger metrics to admin status.
+- Added `server.high-load.conf`.
+- Added benchmark scripts and high-load documentation.
+- Added static cache unit test and ETag integration regression.
+- Verified 21/21 tests with TLS/SQLite and 19/19 without TLS/SQLite.
+
+## v1.7.0 Runtime Security Operations
+
+- Added thread-safe `AuthRuntimeStore`.
+- Added hot reload for `auth_secrets_file`.
+- Added immediate token revocation without server restart.
+- Added last-known-good behavior when a changed secrets file is malformed.
+- Added file removal handling that revokes all file-backed tokens.
+- Added `auth_hot_reload`.
+- Added `auth_reload_interval_seconds`.
+- Added authentication store generation and reload timestamp to admin status.
+- Added `auth_store_reloaded` and `auth_store_reload_failed` audit events.
+- Added internal audit log rotation without restart.
+- Added `audit_rotate_bytes`.
+- Added `audit_rotate_keep`.
+- Added atomic `scripts/manage_auth_tokens.py` rotation/revocation tool.
+- Added `auth_runtime_store_tests`.
+- Added `logger_tests`.
+- Added `integration_auth_hot_reload_tests`.
+- Verified 20 tests with TLS/SQLite and 18 tests without TLS/SQLite.
+
+## v1.6.0 Security Operations
+
+- Added internal SHA-256 implementation independent of TLS/OpenSSL.
+- Added constant-time comparison for plaintext compatibility tokens and token hashes.
+- Added separate hashed token store through `auth_secrets_file`.
+- Added token rule format with scopes and optional Unix-epoch expiration.
+- Added distinct authorization outcomes:
+  - missing,
+  - invalid,
+  - expired,
+  - insufficient scope,
+  - allowed.
+- Added audit events:
+  - `auth_missing`,
+  - `auth_invalid`,
+  - `auth_expired`,
+  - `auth_scope_denied`,
+  - `auth_allowed`.
+- Added protected `/__hydrogen/admin/status` endpoint requiring `admin` scope.
+- Added non-secret status data: uptime, worker count, queue depth and enabled modules.
+- Added Python and PowerShell token generators.
+- Added `secrets/auth.tokens.example` and Git ignore rules for real token stores.
+- Added `auth_tests` and `integration_admin_status_tests`.
+- Verified 17/17 tests with TLS + SQLite and 15/15 without TLS/SQLite.
+
 ## v1.5.88 Scoped token authorization and audit log
 
 - Added scoped bearer tokens:

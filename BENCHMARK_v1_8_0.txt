@@ -1,0 +1,46 @@
+HydrogenHttpd v1.8.0 local benchmark
+
+Purpose
+-------
+Compare the v1.7.0 runtime-security package with the v1.8.0 high-load profile after the static-cache shared-lock correction.
+
+Environment
+-----------
+- Linux x86_64 container
+- 5 visible CPU cores
+- GCC 14.2.0
+- ApacheBench 2.3
+- HTTP over loopback
+- TLS disabled
+- 69,632-byte static text file
+- 12,000 requests per run
+- concurrency: 100
+- three runs per version
+- failed requests: 0 in every recorded run
+- access log enabled for both profiles and directed to /dev/null
+
+v1.7.0 requests/second
+----------------------
+25,615.52
+21,883.51
+23,817.60
+
+Median: 23,817.60 requests/second
+
+v1.8.0 requests/second
+----------------------
+26,093.37
+27,369.33
+28,279.08
+
+Median: 27,369.33 requests/second
+
+Observed median difference
+--------------------------
++14.91% requests/second in this specific local test.
+
+Interpretation
+--------------
+This is a microbenchmark, not a production capacity guarantee. Results will change with CPU, filesystem, kernel, network, payload size, logging, TLS, FastCGI, rate limiting and workload distribution.
+
+The benchmark demonstrates that the combined high-load changes can improve the static-file hot path without changing HTTP behavior or disabling access logging. Test on the actual target host before selecting worker counts, cache limits and queue sizes.

@@ -1,0 +1,41 @@
+HydrogenHttpd v1.8.0 build and test verification
+
+Toolchain
+---------
+- GCC 14.2.0
+- CMake
+- C++20
+
+Full variant
+------------
+cmake -S . -B build \
+  -DHYDROGENHTTPD_BUILD_TESTS=ON \
+  -DHYDROGENHTTPD_ENABLE_TLS=ON \
+  -DHYDROGENHTTPD_ENABLE_SQLITE=ON \
+  -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure --timeout 40
+
+Result: 21/21 tests passed.
+
+Minimal variant
+---------------
+cmake -S . -B build_no \
+  -DHYDROGENHTTPD_BUILD_TESTS=ON \
+  -DHYDROGENHTTPD_ENABLE_TLS=OFF \
+  -DHYDROGENHTTPD_ENABLE_SQLITE=OFF \
+  -DHYDROGENHTTPD_WARNINGS_AS_ERRORS=ON
+
+cmake --build build_no --parallel
+ctest --test-dir build_no --output-on-failure --timeout 40
+
+Result: 19/19 tests passed.
+
+Additional checks
+-----------------
+- server.high-load.conf starts successfully on a temporary test port.
+- Python benchmark and token-management scripts compile.
+- Static cache unit test passes.
+- HTTP integration test verifies ETag and 304 Not Modified.
+- Benchmark details are recorded in BENCHMARK_v1_8_0.txt.

@@ -64,3 +64,7 @@ uploads/*
 # Upload spool runtime files
 tmp/uploads/*
 !tmp/uploads/.gitkeep
+
+# Authentication secrets
+secrets/*.tokens
+!secrets/*.example

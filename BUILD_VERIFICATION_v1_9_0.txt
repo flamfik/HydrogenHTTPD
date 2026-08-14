@@ -1,0 +1,36 @@
+HydrogenHttpd v1.9.0 build and installer verification
+
+Full Linux build:
+- GCC 14.2.0
+- Release build
+- TLS enabled
+- SQLite enabled
+- warnings as errors enabled
+- 21/21 tests passed
+
+Minimal Linux build:
+- TLS disabled
+- SQLite disabled
+- warnings as errors enabled
+- 19/19 tests passed
+
+Installer checks:
+- relative config paths validated from a different working directory
+- --version returned HydrogenHttpd 1.9.0
+- shell scripts passed bash/sh syntax checks
+- macOS LaunchDaemon plist parsed successfully
+- DEB package contains /usr/bin, /usr/lib/systemd, /usr/lib/tmpfiles.d and /etc/logrotate.d
+- default installed webroot contains index.html only
+- no active auth.tokens file included
+- no private key or certificate included
+- Linux portable TGZ generated with relocatable bin/share/libexec layout
+
+Native installer status:
+- Linux DEB: generated in this environment
+- Linux portable TGZ: generated in this environment
+- Linux RPM: build-ready workflow included; requires RPM build environment
+- Windows NSIS EXE/portable ZIP: build-ready target-native workflow included
+- macOS PKG/portable TGZ: build-ready target-native workflow included
+
+Public Windows distribution should add Authenticode signing.
+Public macOS distribution should add Developer ID Installer signing and notarization.

@@ -1,0 +1,69 @@
+{
+  "project": "HydrogenHttpd",
+  "version": "1.9.0",
+  "edition": "Cross-Platform Installer Edition",
+  "locally_built_artifacts": [
+    {
+      "platform": "Linux",
+      "format": "DEB",
+      "file": "HydrogenHttpd-1.9.0-Linux-amd64.deb",
+      "status": "built_and_verified",
+      "architecture": "amd64",
+      "note": "Built in the current Linux environment. The included GitHub workflow builds a more broadly compatible release on Ubuntu 22.04."
+    },
+    {
+      "platform": "Linux",
+      "format": "portable_tgz",
+      "file": "HydrogenHttpd-1.9.0-Linux-x86_64-Portable.tar.gz",
+      "status": "built_and_verified",
+      "architecture": "x86_64"
+    }
+  ],
+  "target_native_builds": [
+    {
+      "platform": "Windows",
+      "formats": [
+        "NSIS setup EXE",
+        "portable ZIP"
+      ],
+      "status": "build_ready",
+      "workflow": ".github/workflows/installers.yml",
+      "notes": [
+        "Native Windows Service support is included.",
+        "Public distribution should add Authenticode signing."
+      ]
+    },
+    {
+      "platform": "macOS",
+      "formats": [
+        "PKG",
+        "portable TGZ"
+      ],
+      "status": "build_ready",
+      "workflow": ".github/workflows/installers.yml",
+      "notes": [
+        "LaunchDaemon and dedicated service account are included.",
+        "Public distribution should add Developer ID Installer signing and notarization."
+      ]
+    },
+    {
+      "platform": "Linux RPM",
+      "formats": [
+        "RPM"
+      ],
+      "status": "build_ready",
+      "workflow": ".github/workflows/installers.yml"
+    }
+  ],
+  "verification": {
+    "tls_sqlite_tests": "21/21 passed",
+    "minimal_tests": "19/19 passed",
+    "warnings_as_errors": true,
+    "relative_config_paths": "verified",
+    "linux_deb_contents": "verified",
+    "portable_archive": "verified",
+    "shell_script_syntax": "verified",
+    "macos_plist": "verified",
+    "windows_native_compile": "requires Windows runner"
+  }
+}
