@@ -1,5 +1,5 @@
 <?php
-header("Content-Type: text/html; charset=utf-8");
-echo "<h1>HydrogenHttpd PHP FastCGI works</h1>";
-echo "<p>PHP version: " . htmlspecialchars(PHP_VERSION, ENT_QUOTES, "UTF-8") . "</p>";
+// Minimal FastCGI smoke-test endpoint. Do not expose runtime or environment details.
+header("Content-Type: text/plain; charset=utf-8");
+echo "HydrogenHttpd PHP-FPM integration OK\n";
 ?>

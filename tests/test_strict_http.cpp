@@ -16,6 +16,21 @@ int main() {
     auto duplicateHost = StrictHttpParser::parse("GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n", limits);
     assert(!duplicateHost.ok);
 
+    auto emptyHost = StrictHttpParser::parse("GET / HTTP/1.1\r\nHost: \r\n\r\n", limits);
+    assert(!emptyHost.ok);
+
+    auto duplicateContentLength = StrictHttpParser::parse(
+        "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\nContent-Length: 4\r\n\r\ntest", limits);
+    assert(!duplicateContentLength.ok);
+
+    auto conflictingContentLength = StrictHttpParser::parse(
+        "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\nContent-Length: 5\r\n\r\ntest", limits);
+    assert(!conflictingContentLength.ok);
+
+    auto transferEncodingWithLength = StrictHttpParser::parse(
+        "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nContent-Length: 4\r\n\r\ntest", limits);
+    assert(!transferEncodingWithLength.ok);
+
     auto transferEncoding = StrictHttpParser::parse("GET / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n", limits);
     assert(!transferEncoding.ok);
     assert(transferEncoding.status == 501);

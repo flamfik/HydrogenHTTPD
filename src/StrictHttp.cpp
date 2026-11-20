@@ -101,12 +101,16 @@ HttpParseResult StrictHttpParser::parse(const std::string& raw, const HttpParseL
 
         name = lowercase(name);
         if (name == "host") {
-            if (sawHost) return fail(400, "Bad Request", "400 Bad Request\n");
+            // HTTP/1.1 requires exactly one non-empty Host field. Reject duplicates
+            // rather than allowing intermediaries to choose different values.
+            if (sawHost || value.empty()) return fail(400, "Bad Request", "400 Bad Request\n");
             sawHost = true;
         }
         if (name == "transfer-encoding") return fail(501, "Not Implemented", "501 Not Implemented\n");
         if (name == "content-length") {
-            if (!contentLength.empty() && contentLength != value) return fail(400, "Bad Request", "400 Bad Request\n");
+            // Reject all duplicate Content-Length fields, even byte-identical ones.
+            // This strict policy avoids parser differentials across intermediaries.
+            if (!contentLength.empty()) return fail(400, "Bad Request", "400 Bad Request\n");
             contentLength = value;
         }
 
