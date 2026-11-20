@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.9.1 Security Hardening
+
+- Reject empty HTTP/1.1 Host fields.
+- Reject all duplicate Content-Length fields, including identical duplicates.
+- Add regression coverage for duplicate framing fields and TE+CL requests.
+- Reduce the PHP FastCGI smoke-test endpoint to a fixed status message without disclosing the PHP runtime version.
+- Expand PHP-FPM deployment hardening guidance.
+
+
 ## v1.9.0 Cross-Platform Installer Edition
 
 - Added configuration-relative filesystem path resolution.

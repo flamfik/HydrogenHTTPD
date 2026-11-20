@@ -56,3 +56,23 @@ Avoid using the legacy `auth_bearer_token` in new deployments.
 - Set filesystem permissions so only the service account can read the token store.
 - Use token expiration and separate upload/admin scopes.
 - Enable `/__hydrogen/admin/status` only with endpoint authentication.
+
+
+## Strict HTTP framing policy
+
+- HTTP/1.1 requests must contain exactly one non-empty `Host` field.
+- Any duplicate `Content-Length` field is rejected, including identical duplicates.
+- `Transfer-Encoding` is not implemented and is rejected. Requests containing both
+  `Transfer-Encoding` and `Content-Length` are therefore rejected before routing.
+- Do not expose PHP-FPM's FastCGI listener to untrusted networks.
+
+## PHP-FPM deployment
+
+- Keep `enable_php = false` unless PHP-FPM is deliberately configured.
+- Bind PHP-FPM to loopback or a private Unix socket with restrictive permissions.
+- Use a currently supported PHP branch and apply upstream security releases promptly.
+- Keep uploads, spool files, secrets, backups, and writable application data outside
+  the document root.
+- Disable `display_errors` in production and set `expose_php = Off`.
+- Use a dedicated PHP-FPM pool identity with least privilege and bounded worker,
+  request, execution-time, and memory limits.
